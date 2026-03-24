@@ -1,12 +1,11 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
 import math
 import plotly.graph_objects as go
-from datetime import datetime, timezone, timedelta
 from scipy.stats import norm
+from datetime import datetime
 
 # --- 1. КОНФИГУРАЦИЯ СТИЛЯ REYA ---
 st.set_page_config(page_title="Reya Alpha Terminal", page_icon="⚡", layout="wide")
@@ -18,115 +17,137 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #00FF00 !important; font-family: 'Space Mono', monospace; }
     .stButton>button { border: 1px solid #00FF00; background-color: #000; color: #00FF00; width: 100%; }
     .stButton>button:hover { background-color: #00FF00; color: #000; }
+    .stHeader { color: #00FF00; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. МАТЕМАТИЧЕСКИЙ ДВИЖОК ---
 def calc_realized_vol(prices):
-    """Расчет реализованной волатильности (RV) за 24ч (годовое исчисление)"""
+    """Расчет реализованной волатильности (RV) на основе 5-минутных свечей за 24ч"""
     log_returns = np.log(prices / prices.shift(1)).dropna()
-    # 24 часа * 365 дней (минутные свечи: 60*24*365)
-    return log_returns.std() * np.sqrt(365 * 1440) * 100
+    # 5-минутных интервалов в году: (60/5) * 24 * 365 = 105120
+    annualization_factor = np.sqrt(105120)
+    return log_returns.std() * annualization_factor * 100
 
 def lognormal_prob_above(S, K, iv, T):
     """Вероятность того, что цена будет выше K (BSM d2)"""
     if S <= 0 or K <= 0 or iv <= 0 or T <= 0: return 0.5
+    # iv передается как 0.7 (для 70%)
     d2 = (math.log(S / K) - 0.5 * iv**2 * T) / (iv * math.sqrt(T))
     return float(norm.cdf(d2))
 
 # --- 3. ПОЛУЧЕНИЕ ДАННЫХ ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def get_market_data():
-    # 1. Спот цена (Bybit)
-    r_price = requests.get("https://api.bybit.com").json()
-    price = float(r_price["result"]["list"][0]["lastPrice"])
+    # 1. Свечи 5м и спот цена (Bybit V5)
+    # limit=288 (24 часа по 5 минут)
+    bybit_url = "https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=5&limit=288"
+    resp = requests.get(bybit_url).json()
     
-    # 2. DVOL (Deribit) - Ожидаемая волатильность
-    r_dvol = requests.get("https://www.deribit.com").json()
-    dvol = float(r_dvol["result"]["data"][-1][3])
+    data = resp['result']['list']
+    # Bybit возвращает: [timestamp, open, high, low, close, volume, turnover]
+    df = pd.DataFrame(data, columns=['t','o','h','l','c','v','turnover']).astype(float)
+    df = df.iloc[::-1] # Разворачиваем, чтобы старые были сверху
     
-    # 3. История цен для RV (последние 24 часа, 5-минутные свечи)
-    r_hist = requests.get("https://api.bybit.com").json()
-    df_hist = pd.DataFrame(r_hist["result"]["list"], columns=['t','o','h','l','c','v','turnover']).astype(float)
-    rv = calc_realized_vol(df_hist['c'])
+    current_price = df['c'].iloc[-1]
+    rv = calc_realized_vol(df['c'])
     
-    return price, dvol, rv
+    # 2. DVOL (Deribit Volatility Index)
+    # Запрашиваем текущее значение индекса DVOL
+    dvol_url = "https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=1&limit=1"
+    dvol_resp = requests.get(dvol_url).json()
+    # DVOL возвращает: [timestamp, open, high, low, close]
+    current_dvol = dvol_resp['result']['data'][0][4]
+    
+    return current_price, current_dvol, rv
 
 # --- 4. ОСНОВНОЙ ИНТЕРФЕЙС ---
 try:
     spot_price, dvol, rv = get_market_data()
-except:
-    st.error("Ошибка подключения к API. Проверь интернет.")
+except Exception as e:
+    st.error(f"Ошибка подключения: {e}")
     st.stop()
 
 st.title("⚡ Reya Alpha & Volatility Terminal")
-st.caption("Quantitative insights for Reya Network LPs & Traders")
+st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
 # Метрики сверху
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("BTC Price", f"${spot_price:,.0f}")
+m1.metric("BTC Price", f"${spot_price:,.2f}")
 m2.metric("Implied Vol (DVOL)", f"{dvol:.1f}%")
-m3.metric("Realized Vol (RV)", f"{rv:.1f}%")
+m3.metric("Realized Vol (RV 24h)", f"{rv:.1f}%")
 vol_gap = dvol - rv
-m4.metric("Volatility Gap", f"{vol_gap:.1f}%", delta=f"{vol_gap:.1f}%", delta_color="inverse")
+m4.metric("Volatility Risk Premium", f"{vol_gap:.1f}%", delta=f"{vol_gap:.1f}%", delta_color="normal")
 
 st.divider()
 
-# --- СТРАТЕГИЯ MEAN REVERSION ---
+# --- СТРАТЕГИЯ ---
 col_left, col_right = st.columns([2, 1])
 
 with col_left:
     st.subheader("📊 Volatility Arbitrage Radar")
     
-    if vol_gap > 10:
-        st.success("🎯 **SIGNAL: SELL VOLATILITY (High Fear)**")
-        st.write("Рынок переплачивает за риск. Это идеальное время для **предоставления ликвидности (LP) на Reya**, так как комиссии от трейдеров будут перекрывать реальные движения цены.")
-    elif vol_gap < -5:
-        st.warning("⚠️ **SIGNAL: BUY VOLATILITY (Underpriced)**")
-        st.write("Рынок слишком спокоен. Ожидается сильный импульс. Будьте осторожны с короткими позициями и низким залогом.")
+    if vol_gap > 15:
+        st.success("🎯 **SIGNAL: SHORT VOLATILITY (High VRP)**")
+        st.write("Наблюдается высокая премия за риск. **LP на Reya** сейчас максимально выгоден: вы получаете комиссии за торговлю волатильностью, которая в реальности ниже ожидаемой.")
+    elif vol_gap < 5:
+        st.warning("⚠️ **SIGNAL: LONG VOLATILITY / PROTECT**")
+        st.write("Рынок недооценивает возможные движения. Рекомендуется хеджировать позиции или использовать стратегии пробоя.")
     else:
         st.info("⚖️ **SIGNAL: NEUTRAL**")
-        st.write("Волатильность в равновесии. Торгуйте по тренду.")
+        st.write("Волатильность сбалансирована. Оптимальное время для дельта-нейтрального маркет-мейкинга.")
 
-    # График (Визуализация вероятностей)
-    strikes = np.linspace(spot_price * 0.8, spot_price * 1.2, 50)
-    probs = [lognormal_prob_above(spot_price, k, dvol/100, 7/365) for k in strikes] # на 7 дней
+    # График вероятностей
+    strikes = np.linspace(spot_price * 0.7, spot_price * 1.3, 100)
+    # Рассчитываем вероятность на 7 дней
+    probs = [lognormal_prob_above(spot_price, k, dvol/100, 7/365) for k in strikes]
     
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=strikes, y=probs, line=dict(color='#00FF00', width=3), name="Prob Above Strike"))
+    fig.add_trace(go.Scatter(x=strikes, y=probs, name="P(S > K)", line=dict(color='#00FF00', width=2)))
+    fig.add_vline(x=spot_price, line_dash="dash", line_color="white", annotation_text="Spot")
+    
     fig.update_layout(
-        title="Вероятность удержания цены (через 7 дней)",
+        title="Probability of Price staying Above Strike (7-Day Outlook)",
         template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(title="BTC Strike Price", gridcolor='#222'),
-        yaxis=dict(title="Probability", gridcolor='#222')
+        xaxis=dict(title="Strike Price ($)", gridcolor='#222'),
+        yaxis=dict(title="Probability (0-1)", gridcolor='#222'),
+        height=400
     )
     st.plotly_chart(fig, use_container_width=True)
 
 with col_right:
-    st.subheader("🛡️ Risk Metrics")
-    target_price = st.number_input("Target Price (Downside)", value=int(spot_price*0.9), step=500)
+    st.subheader("🛡️ Liquidation Risk Profile")
+    target_price = st.number_input("Liquidation Price (Downside)", value=int(spot_price*0.85), step=500)
     
     # Расчет вероятности падения ниже уровня за 24 часа
+    # 1 - (вероятность что цена ВЫШЕ target) = вероятность что цена НИЖЕ target
     prob_down = 1 - lognormal_prob_above(spot_price, target_price, dvol/100, 1/365)
     
-    st.write(f"Вероятность падения ниже **${target_price:,.0f}** за 24 часа:")
-    st.header(f"{prob_down*100:.1f}%")
+    st.write(f"Вероятность падения ниже **${target_price:,.0f}** в течение 24ч:")
+    
+    # Визуальный индикатор риска
+    risk_color = "#00FF00" if prob_down < 0.05 else "#FFFF00" if prob_down < 0.15 else "#FF0000"
+    st.markdown(f"<h1 style='color: {risk_color}'>{prob_down*100:.2f}%</h1>", unsafe_allow_html=True)
     
     if prob_down > 0.15:
-        st.error("HIGH LIQUIDATION RISK")
+        st.error("DANGER: Overleveraged Zone")
     else:
-        st.success("SAFE ZONE")
+        st.success("SAFE: High Margin Cushion")
 
     st.divider()
-    st.markdown("### 💎 Reya Point Multiplier")
-    st.write("Based on Volatility:")
-    st.code(f"Current Efficiency: {1 + (vol_gap/100):.2f}x")
-    st.caption("Higher Gap = Better conditions for Signal Points via LP-ing.")
+    st.markdown("### 💎 Reya Capital Efficiency")
+    efficiency = 1 + (vol_gap / 100)
+    st.write(f"Based on current vol metrics, LP efficiency is:")
+    st.code(f"{efficiency:.2f}x Multiplier")
+    st.caption("Lower RV relative to IV increases the probability of profitable LP cycles.")
 
-# Футер
-st.sidebar.image("https://docs.reya.network", width=150) # Проверь ссылку на лого
+# Сидебар
+st.sidebar.markdown("# ⚡ REYA ALPHA")
+st.sidebar.info("Этот терминал анализирует разрыв между IV (ожиданиями) и RV (реальностью) для оптимизации позиций в Reya Network.")
+if st.sidebar.button("Refresh Data"):
+    st.rerun()
+
 st.sidebar.markdown("---")
-st.sidebar.write("Developed for **Reya Signal Program**")
-st.sidebar.button("Generate Alpha Report (X)")
+st.sidebar.write("Developed for Reya LPs")
