@@ -5,273 +5,238 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
 
-# --- 1. КОНФИГУРАЦИЯ СТРАНИЦЫ ---
-st.set_page_config(page_title="Reya Staking Interface", page_icon="⚡", layout="wide")
+# --- 1. CONFIG & THEME ---
+st.set_page_config(page_title="Reya Alpha | Staking", page_icon="⚡", layout="wide")
 
-# --- 2. CSS-СТИЛИЗАЦИЯ В ДУХЕ REYA NETWORK ---
+# Кастомный CSS для полной стилизации под Reya Network
 st.markdown("""
     <style>
-    /* Импорт шрифтов: Inter для UI, JetBrains Mono для цифр */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
 
-    /* Глобальный фон, убираем стандартный отступ Streamlit */
-    .stApp {
-        background-color: #0B0B0C !important;
-        font-family: 'Inter', sans-serif !important;
-        color: #F2F2F2 !important;
-    }
-    
+    /* База */
+    .stApp { background-color: #0B0B0C !important; color: #F2F2F2 !important; font-family: 'Inter', sans-serif !important; }
     header {visibility: hidden;}
-    .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
+    .block-container {padding-top: 2rem !important;}
 
-    /* Типографика и заголовки */
-    h1, h2, h3 {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important;
-        color: #FFFFFF !important;
-        letter-spacing: -0.02em;
+    /* Карточки и блоки */
+    .reya-card {
+        background: rgba(22, 22, 23, 0.8);
+        border: 1px solid #2A2A2B;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
     }
 
-    /* Карточки метрик (Metrics) - Матовое стекло в стиле Mine Shaft */
+    /* Метрики */
     [data-testid="stMetric"] {
-        background-color: rgba(32, 32, 32, 0.4) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid #2A2A2A !important;
-        padding: 24px !important;
-        border-radius: 16px !important;
-        transition: border-color 0.3s ease;
-    }[data-testid="stMetric"]:hover {
-        border-color: rgba(75, 255, 153, 0.3) !important;
-    }
-
-    /* Значения в метриках */[data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', monospace !important;
-        color: #FFFFFF !important;
-        font-size: 2.2rem !important;
-        font-weight: 600 !important;
-    }
-
-    /* Лейблы метрик */[data-testid="stMetricLabel"] {
-        color: #9CA3AF !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-    }
-
-    /* Дельты (Delta) внутри метрик - Фирменный зеленый Reya */[data-testid="stMetricDelta"] svg { fill: #4BFF99 !important; }
-    [data-testid="stMetricDelta"] div { 
-        color: #4BFF99 !important; 
-        font-family: 'JetBrains Mono', monospace !important; 
-        font-weight: 600 !important;
-    }
-
-    /* Главные стили кнопок (Call to action) */
-    .stButton > button {
-        background-color: #4BFF99 !important;
-        color: #000000 !important;
-        border: none !important;
+        background: #161617 !important;
+        border: 1px solid #2A2A2B !important;
+        padding: 20px !important;
         border-radius: 12px !important;
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important;
-        font-size: 1.1rem !important;
-        padding: 1rem !important;
-        width: 100% !important;
-        transition: all 0.2s ease !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        color: #4BFF99 !important; /* Фирменный неон Reya */
+        font-weight: 700 !important;
+    }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem !important; color: #888 !important; text-transform: uppercase; }
+
+    /* Кнопки */
+    .stButton > button {
+        background: #4BFF99 !important;
+        color: #000 !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        width: 100%;
+        height: 50px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: 0.3s all;
     }
     .stButton > button:hover {
-        background-color: #83FFB9 !important;
-        box-shadow: 0 0 24px rgba(75, 255, 153, 0.25) !important;
-        transform: translateY(-1px);
-    }
-    .stButton > button:active {
-        transform: translateY(1px);
+        box-shadow: 0 0 20px rgba(75, 255, 153, 0.4);
+        transform: translateY(-2px);
     }
 
-    /* Вкладки (Tabs) для переключения Stake / Unstake */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 32px;
-        background-color: transparent !important;
-    }
-    .stTabs[data-baseweb="tab"] {
-        background-color: transparent !important;
-        color: #9CA3AF !important;
-        border: none !important;
-        border-bottom: 2px solid transparent !important;
-        border-radius: 0 !important;
-        padding-bottom: 12px !important;
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 500 !important;
-        font-size: 1.1rem !important;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #FFFFFF !important;
-        border-bottom: 2px solid #4BFF99 !important;
+    /* XP Badge */
+    .xp-badge {
+        background: linear-gradient(90deg, #4BFF99 0%, #34D399 100%);
+        color: black;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 800;
+        font-family: 'JetBrains Mono';
+        font-size: 0.7rem;
     }
 
-    /* Поля ввода (Inputs) */
-    .stNumberInput input {
-        background-color: #151515 !important;
-        border: 1px solid #2A2A2A !important;
-        border-radius: 12px !important;
-        color: #FFFFFF !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 1.5rem !important;
-        padding: 12px 16px !important;
-    }
-    .stNumberInput input:focus {
-        border-color: #4BFF99 !important;
-        box-shadow: none !important;
-    }
-
-    /* Разделители */
-    hr { border-color: #2A2A2A !important; margin-top: 2rem !important; margin-bottom: 2rem !important; }
-
-    /* Кастомная плашка APY */
-    .apy-badge {
-        background: rgba(75, 255, 153, 0.1);
-        color: #4BFF99;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
-        font-weight: 600;
-        vertical-align: middle;
-        margin-left: 12px;
-    }
+    /* Табы */
+    .stTabs [data-baseweb="tab-list"] { background: transparent; border-bottom: 1px solid #2A2A2B; }
+    .stTabs [data-baseweb="tab"] { color: #888; font-weight: 600; }
+    .stTabs [aria-selected="true"] { color: #4BFF99 !important; border-bottom-color: #4BFF99 !important; }
+    
+    /* Скроллбар */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0B0B0C; }
+    ::-webkit-scrollbar-thumb { background: #2A2A2B; border-radius: 10px; }
     </style>
-    """, unsafe_allow_html=True)
-
-# --- 3. ИМИТАЦИОННЫЕ ДАННЫЕ И СОСТОЯНИЯ ---
-if 'wallet_balance' not in st.session_state:
-    st.session_state.wallet_balance = 25400.50
-if 'staked_balance' not in st.session_state:
-    st.session_state.staked_balance = 10000.00
-
-active_apy = 14.2
-tvl = 145200000.00
-
-# --- 4. ВЕРСТКА ИНТЕРФЕЙСА ---
-
-# Шапка с логотипом/названием
-st.markdown("""
-<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;'>
-    <div style='display: flex; align-items: center; gap: 12px;'>
-        <div style='background: #4BFF99; width: 24px; height: 24px; border-radius: 4px;'></div>
-        <h2 style='margin:0; padding:0;'>Reya Network <span style='color: #888; font-weight: 400; font-size: 1.2rem;'>| Stake</span></h2>
-    </div>
-    <div style='font-family: "JetBrains Mono"; color: #9CA3AF; font-size: 0.9rem;'>
-        Network: <span style='color: #FFF;'>Arbitrum</span> • Status: <span style='color: #4BFF99;'>Operational</span>
-    </div>
-</div>
 """, unsafe_allow_html=True)
 
-# Метрики протокола (3 колонки)
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Value Locked", f"${tvl:,.0f}")
-col2.metric("Current APY", f"{active_apy}%", delta="+0.4% (24h)")
-col3.metric("Your Staked Return", "$1,420.50", delta="+$12.40 (Today)")
+# --- 2. LOGIC & STATE ---
+if 'balance' not in st.session_state:
+    st.session_state.balance = 42000.00
+if 'staked' not in st.session_state:
+    st.session_state.staked = 5000.0
+if 'xp' not in st.session_state:
+    st.session_state.xp = 1450.0
+if 'history' not in st.session_state:
+    st.session_state.history = [
+        {"type": "Stake", "amount": 5000, "status": "Confirmed", "time": "2h ago"},
+        {"type": "Deposit", "amount": 12000, "status": "Confirmed", "time": "1d ago"}
+    ]
 
-st.divider()
+def add_xp(amount):
+    # Логика: чем больше стейк, тем быстрее капает XP
+    st.session_state.xp += (st.session_state.staked / 1000) * amount
 
-# Основной рабочий блок (График слева, Управление стейкингом справа)
-left_panel, right_panel = st.columns([1.6, 1])
-
-with left_panel:
-    st.markdown("### Yield Performance (7D)")
+# --- 3. SIDEBAR (WALLET & XP) ---
+with st.sidebar:
+    st.markdown("<h2 style='color:#FFF;'>⚡ TERMINAL</h2>", unsafe_allow_html=True)
     
-    # Генерация данных для графика (исторический APY)
-    dates =[datetime.now() - timedelta(days=i) for i in range(7, -1, -1)]
-    base_apy = active_apy
-    y_data =[base_apy + np.random.normal(0, 0.2) for _ in range(8)]
-    y_data[-1] = active_apy # Текущий APY
+    # Wallet Info
+    st.markdown(f"""
+        <div class="reya-card">
+            <p style="color:#888; font-size:0.7rem; margin-bottom:5px;">CONNECTED WALLET</p>
+            <p style="font-family:'JetBrains Mono'; font-size:0.9rem;">0x71C...89B1</p>
+            <hr style="border-color:#2A2A2B">
+            <p style="color:#888; font-size:0.7rem; margin-bottom:5px;">REYA POINTS (XP)</p>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:1.4rem; font-weight:700; color:#4BFF99;">{st.session_state.xp:,.1f}</span>
+                <span class="xp-badge">RANK #452</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
+    st.markdown("### 📊 Yield Projection")
+    # Калькулятор симуляции
+    period = st.select_slider("Projection Period", options=["30D", "90D", "1Y"])
+    days = 30 if period == "30D" else 90 if period == "90D" else 365
+    projected = st.session_state.staked * (0.142 / 365 * days)
+    st.caption(f"Estimated yield for {period}:")
+    st.markdown(f"<h3 style='color:#FFF;'>+ ${projected:,.2f}</h3>", unsafe_allow_html=True)
+
+# --- 4. MAIN CONTENT ---
+
+# Header
+col_h1, col_h2 = st.columns([2, 1])
+with col_h1:
+    st.markdown("<h1 style='margin-bottom:0;'>Active Staking</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#888;'>Stake srUSD to power the Reya ecosystem and earn network fees.</p>", unsafe_allow_html=True)
+
+# Top Metrics
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("TVL", "$241.8M", delta="1.2%")
+m2.metric("Base APY", "14.22%", delta="0.4%")
+m3.metric("Your Stake", f"${st.session_state.staked:,.0f}")
+m4.metric("Efficiency", "1.4x", help="Capital efficiency multiplier based on Reya's margin engine")
+
+st.markdown("---")
+
+# Main Interface
+left_col, right_col = st.columns([1.5, 1])
+
+with left_col:
+    # График доходности
+    st.markdown("### Ecosystem Growth")
+    time_points = pd.date_range(end=datetime.now(), periods=30)
+    data = pd.DataFrame({
+        'Date': time_points,
+        'TVL': np.linspace(180, 241, 30) + np.random.normal(0, 2, 30)
+    })
+    
     fig = go.Figure()
-    
-    # График с заливкой (прозрачный градиент под линией)
     fig.add_trace(go.Scatter(
-        x=dates, y=y_data,
-        mode='lines',
-        line=dict(color='#4BFF99', width=3),
+        x=data['Date'], y=data['TVL'],
         fill='tozeroy',
-        fillcolor='rgba(75, 255, 153, 0.05)'
+        fillcolor='rgba(75, 255, 153, 0.05)',
+        line=dict(color='#4BFF99', width=3),
+        name="TVL ($M)"
     ))
-
-    # Стилизация графика под Reya-Dark
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(gridcolor='#1A1A1A', zerolinecolor='#1A1A1A', tickfont=dict(family="JetBrains Mono", color="#888")),
-        yaxis=dict(gridcolor='#1A1A1A', zerolinecolor='#1A1A1A', tickfont=dict(family="JetBrains Mono", color="#888"),
-                   ticksuffix="%"),
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=380,
-        hovermode="x unified"
+        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=0, r=0, t=20, b=0), height=300,
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='#1A1A1B')
     )
     st.plotly_chart(fig, use_container_width=True)
 
-with right_panel:
-    # Контейнер карточки стейкинга
-    st.markdown("""
-    <div style="background: rgba(32, 32, 32, 0.5); border: 1px solid #2A2A2A; border-radius: 16px; padding: 24px;">
-        <h3 style="margin-top: 0; font-size: 1.2rem; display: inline-block;">Manage Stake</h3>
-        <span class="apy-badge">14.2% APY</span>
-    """, unsafe_allow_html=True)
-    
-    # Вкладки
-    tab_stake, tab_unstake = st.tabs(["Stake", "Unstake / Withdraw"])
-    
-    with tab_stake:
-        st.markdown(f"<p style='color: #9CA3AF; margin-bottom: 4px; font-size: 0.85rem;'>Wallet Balance</p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='font-family: JetBrains Mono; color: #FFF; font-size: 1.5rem; margin-top: 0;'>{st.session_state.wallet_balance:,.2f} <span style='color: #4BFF99; font-size: 1rem;'>srUSD</span></p>", unsafe_allow_html=True)
-        
-        amount = st.number_input("Amount to stake", min_value=0.0, max_value=st.session_state.wallet_balance, value=0.0, step=100.0, label_visibility="collapsed")
-        
-        if st.button("Confirm Stake 🔒", key="btn_stake"):
-            if amount > 0:
-                with st.spinner("Executing transaction..."):
-                    time.sleep(1.5) # Имитация транзакции
-                    st.session_state.wallet_balance -= amount
-                    st.session_state.staked_balance += amount
-                st.success("Stake successful!")
-                st.rerun()
-            else:
-                st.error("Enter a valid amount")
-                
-    with tab_unstake:
-        st.markdown(f"<p style='color: #9CA3AF; margin-bottom: 4px; font-size: 0.85rem;'>Staked Balance</p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='font-family: JetBrains Mono; color: #FFF; font-size: 1.5rem; margin-top: 0;'>{st.session_state.staked_balance:,.2f} <span style='color: #4BFF99; font-size: 1rem;'>srUSD</span></p>", unsafe_allow_html=True)
-        
-        amount_unstake = st.number_input("Amount to unstake", min_value=0.0, max_value=st.session_state.staked_balance, value=0.0, step=100.0, label_visibility="collapsed")
-        
-        # Для кнопки Unstake используем небольшую хитрость, чтобы переопределить ее цвет через кастомный класс (так как она второстепенная)
-        st.markdown("""
-        <style>
-        .btn-unstake button { 
-            background-color: transparent !important; 
-            border: 1px solid #4BFF99 !important; 
-            color: #4BFF99 !important; 
-        }
-        .btn-unstake button:hover { 
-            background-color: rgba(75, 255, 153, 0.1) !important; 
-            box-shadow: none !important;
-        }
-        </style>
+    # Activity Feed
+    st.markdown("### Recent Activity")
+    for item in st.session_state.history:
+        st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid #1A1A1B;">
+                <span style="color:#FFF;">{item['type']} <span style="color:#4BFF99; font-family:'JetBrains Mono';">${item['amount']}</span></span>
+                <span style="color:#888; font-size:0.8rem;">{item['time']} • <span style="color:#34D399;">{item['status']}</span></span>
+            </div>
         """, unsafe_allow_html=True)
+
+with right_col:
+    # Staking Box
+    st.markdown('<div class="reya-card">', unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-top:0;'>Manage Position</h3>", unsafe_allow_html=True)
+    
+    t1, t2 = st.tabs(["STAKE", "UNSTAKE"])
+    
+    with t1:
+        st.markdown(f"<p style='color:#888; font-size:0.8rem;'>Available: <b>{st.session_state.balance:,.2f} srUSD</b></p>", unsafe_allow_html=True)
+        amount = st.number_input("Amount", min_value=0.0, step=100.0, label_visibility="collapsed")
         
-        st.markdown('<div class="btn-unstake">', unsafe_allow_html=True)
-        if st.button("Unstake & Withdraw", key="btn_unstake"):
-            if amount_unstake > 0:
-                with st.spinner("Withdrawing..."):
-                    time.sleep(1.5)
-                    st.session_state.staked_balance -= amount_unstake
-                    st.session_state.wallet_balance += amount_unstake
-                st.success("Withdrawal complete!")
+        if st.button("STAKE srUSD"):
+            if amount > 0 and amount <= st.session_state.balance:
+                with st.spinner("Broadcasting to Reya L2..."):
+                    time.sleep(1.2)
+                    st.session_state.balance -= amount
+                    st.session_state.staked += amount
+                    st.session_state.history.insert(0, {"type": "Stake", "amount": amount, "status": "Confirmed", "time": "Just now"})
+                    add_xp(50) # Бонус XP за действие
+                st.success(f"Success! {amount} srUSD added to stake.")
                 st.rerun()
             else:
-                st.error("Enter a valid amount")
-        st.markdown('</div>', unsafe_allow_html=True)
+                st.error("Invalid amount")
+        
+        st.markdown("""
+            <div style="margin-top:20px; font-size:0.75rem; color:#888;">
+                <p>⚡ Boost: Staking for 30+ days increases XP multiplier to 1.5x</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    # Закрываем div карточки
-    st.markdown("</div>", unsafe_allow_html=True)
+    with t2:
+        st.markdown(f"<p style='color:#888; font-size:0.8rem;'>Staked: <b>{st.session_state.staked:,.2f} srUSD</b></p>", unsafe_allow_html=True)
+        u_amount = st.number_input("Unstake Amount", min_value=0.0, step=100.0, label_visibility="collapsed", key="unstake_val")
+        
+        # Стилизация кнопки вывода (второстепенная)
+        st.markdown("<style>.unstake-btn button {background:#1A1A1B !important; color:#FFF !important; border:1px solid #2A2A2B !important;}</style>", unsafe_allow_html=True)
+        st.markdown('<div class="unstake-btn">', unsafe_allow_html=True)
+        if st.button("WITHDRAW"):
+            if u_amount > 0 and u_amount <= st.session_state.staked:
+                st.session_state.staked -= u_amount
+                st.session_state.balance += u_amount
+                st.session_state.history.insert(0, {"type": "Withdraw", "amount": u_amount, "status": "Confirmed", "time": "Just now"})
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Risk Meter (Logic Add-on)
+    st.markdown("""
+        <div class="reya-card" style="background: rgba(255, 59, 105, 0.05); border-color: rgba(255, 59, 105, 0.2);">
+            <p style="color:#FF3B69; font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-bottom:5px;">Health Factor</p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:1.5rem; font-weight:700; color:#FF3B69;">99.8</span>
+                <span style="color:#888; font-size:0.8rem;">Low Risk</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+# Footnote
+st.markdown("<p style='text-align:center; color:#444; font-size:0.7rem; margin-top:50px;'>Reya Alpha Terminal V2.4 • Powered by Reya L2 Network • Secure Connection</p>", unsafe_allow_html=True)
