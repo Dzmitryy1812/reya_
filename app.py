@@ -39,54 +39,44 @@ def lognormal_prob_above(S, K, iv, T):
 # --- 3. ПОЛУЧЕНИЕ ДАННЫХ ---
 @st.cache_data(ttl=300)
 def get_market_data():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    
+    # Вставьте сюда ваш бесплатный API ключ от CryptoCompare
+    API_KEY = "ВАШ_КЛЮЧ_ЗДЕСЬ" 
+    headers = {"Authorization": f"Apikey {API_KEY}"} if API_KEY != "ВАШ_КЛЮЧ_ЗДЕСЬ" else {}
+
     try:
-        # 1. Свечи 5м и спот цена (Bybit V5)
-        bybit_url = "https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=5&limit=288"
-        resp_bybit = requests.get(bybit_url, headers=headers, timeout=10)
-        
-        # Проверка статуса
-        if resp_bybit.status_code != 200:
-            st.error(f"Bybit API Error: {resp_bybit.status_code}")
+        # Получаем 288 минутных свечей (за последние ~5 часов) или часовых
+        # Для расчета волатильности за 24ч лучше взять 'histohour' с лимитом 24
+        url = "https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit=24"
+        resp = requests.get(url, headers=headers)
+        data = resp.json()
+
+        if data['Response'] == 'Error':
+            st.error(f"CryptoCompare Error: {data['Message']}")
             st.stop()
-            
-        data_bybit = resp_bybit.json()
-        
-        # Извлекаем список свечей
-        kline_list = data_bybit.get('result', {}).get('list', [])
-        if not kline_list:
-            st.error("Bybit вернул пустой список данных")
-            st.stop()
-            
-        df = pd.DataFrame(kline_list, columns=['t','o','h','l','c','v','turnover']).astype(float)
-        df = df.iloc[::-1] # От старых к новым
+
+        df = pd.DataFrame(data['Data']['Data'])
+        # Колонки: time, high, low, open, volfrom, volto, close
+        df['c'] = df['close'].astype(float)
         
         current_price = df['c'].iloc[-1]
-        rv = calc_realized_vol(df['c'])
         
-        # 2. DVOL (Deribit Volatility Index)
-        dvol_url = "https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=1&limit=1"
-        resp_dvol = requests.get(dvol_url, headers=headers, timeout=10)
+        # Пересчитываем RV на часовых свечах (корень из 24 * 365)
+        log_returns = np.log(df['c'] / df['c'].shift(1)).dropna()
+        rv = log_returns.std() * np.sqrt(24 * 365) * 100
         
-        if resp_dvol.status_code != 200:
-            # Если Deribit недоступен, используем заглушку (среднее значение), чтобы приложение не падало
-            st.warning("Не удалось получить DVOL с Deribit. Использую среднее значение 50.0")
-            current_dvol = 50.0
-        else:
-            data_dvol = resp_dvol.json()
-            # DVOL: [timestamp, open, high, low, close]
-            current_dvol = data_dvol['result']['data'][0][4]
-            
+        # DVOL (Deribit) часто тоже блокирует. Если 403, ставим константу или симуляцию
+        try:
+            dvol_url = "https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=1&limit=1"
+            d_resp = requests.get(dvol_url, timeout=5).json()
+            current_dvol = d_resp['result']['data'][0][4]
+        except:
+            current_dvol = 52.5 # Заглушка
+
         return current_price, current_dvol, rv
 
     except Exception as e:
-        st.error(f"Критическая ошибка: {str(e)}")
-        # Возвращаем стандартные значения в случае полного сбоя
-        return 65000.0, 50.0, 45.0
-
+        st.error(f"Ошибка агрегатора: {e}")
+        return 60000.0, 50.0, 45.0
 # --- 4. ОСНОВНОЙ ИНТЕРФЕЙС ---
 try:
     spot_price, dvol, rv = get_market_data()
