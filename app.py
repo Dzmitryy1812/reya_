@@ -39,27 +39,53 @@ def lognormal_prob_above(S, K, iv, T):
 # --- 3. ПОЛУЧЕНИЕ ДАННЫХ ---
 @st.cache_data(ttl=300)
 def get_market_data():
-    # 1. Свечи 5м и спот цена (Bybit V5)
-    # limit=288 (24 часа по 5 минут)
-    bybit_url = "https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=5&limit=288"
-    resp = requests.get(bybit_url).json()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     
-    data = resp['result']['list']
-    # Bybit возвращает: [timestamp, open, high, low, close, volume, turnover]
-    df = pd.DataFrame(data, columns=['t','o','h','l','c','v','turnover']).astype(float)
-    df = df.iloc[::-1] # Разворачиваем, чтобы старые были сверху
-    
-    current_price = df['c'].iloc[-1]
-    rv = calc_realized_vol(df['c'])
-    
-    # 2. DVOL (Deribit Volatility Index)
-    # Запрашиваем текущее значение индекса DVOL
-    dvol_url = "https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=1&limit=1"
-    dvol_resp = requests.get(dvol_url).json()
-    # DVOL возвращает: [timestamp, open, high, low, close]
-    current_dvol = dvol_resp['result']['data'][0][4]
-    
-    return current_price, current_dvol, rv
+    try:
+        # 1. Свечи 5м и спот цена (Bybit V5)
+        bybit_url = "https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=5&limit=288"
+        resp_bybit = requests.get(bybit_url, headers=headers, timeout=10)
+        
+        # Проверка статуса
+        if resp_bybit.status_code != 200:
+            st.error(f"Bybit API Error: {resp_bybit.status_code}")
+            st.stop()
+            
+        data_bybit = resp_bybit.json()
+        
+        # Извлекаем список свечей
+        kline_list = data_bybit.get('result', {}).get('list', [])
+        if not kline_list:
+            st.error("Bybit вернул пустой список данных")
+            st.stop()
+            
+        df = pd.DataFrame(kline_list, columns=['t','o','h','l','c','v','turnover']).astype(float)
+        df = df.iloc[::-1] # От старых к новым
+        
+        current_price = df['c'].iloc[-1]
+        rv = calc_realized_vol(df['c'])
+        
+        # 2. DVOL (Deribit Volatility Index)
+        dvol_url = "https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=1&limit=1"
+        resp_dvol = requests.get(dvol_url, headers=headers, timeout=10)
+        
+        if resp_dvol.status_code != 200:
+            # Если Deribit недоступен, используем заглушку (среднее значение), чтобы приложение не падало
+            st.warning("Не удалось получить DVOL с Deribit. Использую среднее значение 50.0")
+            current_dvol = 50.0
+        else:
+            data_dvol = resp_dvol.json()
+            # DVOL: [timestamp, open, high, low, close]
+            current_dvol = data_dvol['result']['data'][0][4]
+            
+        return current_price, current_dvol, rv
+
+    except Exception as e:
+        st.error(f"Критическая ошибка: {str(e)}")
+        # Возвращаем стандартные значения в случае полного сбоя
+        return 65000.0, 50.0, 45.0
 
 # --- 4. ОСНОВНОЙ ИНТЕРФЕЙС ---
 try:
