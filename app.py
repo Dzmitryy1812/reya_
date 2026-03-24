@@ -3,166 +3,204 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
-import time
 
-# --- 1. CONFIG & SYSTEM THEME ---
-st.set_page_config(page_title="Reya Pro Terminal", page_icon="📈", layout="wide")
+# --- 1. SYSTEM CONFIG ---
+st.set_page_config(page_title="Reya | ecosystem_hub", page_icon="⚡", layout="wide")
 
+# --- 2. THE "REYA PURE" CSS (Visual Identity) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
-    
-    /* Global Styles */
-    .stApp { background-color: #050505 !important; font-family: 'Inter', sans-serif !important; color: #F5F5F5 !important; }
+    /* Импорт фирменных шрифтов */
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    /* Глобальный сброс стилей */
+    .stApp {
+        background-color: #050505 !important;
+        color: #FFFFFF !important;
+        font-family: 'Space Grotesk', sans-serif !important;
+    }
+
+    /* Скрытие стандартных элементов Streamlit */
     header {visibility: hidden;}
-    
-    /* Professional Card style */
-    .pro-card {
-        background: #0E0E10;
-        border: 1px solid #1C1C1E;
-        border-radius: 4px; /* Более острые углы выглядят строже */
-        padding: 20px;
-        margin-bottom: 15px;
+    footer {visibility: hidden;}
+    [data-testid="stHeader"] {background: rgba(0,0,0,0);}
+
+    /* СТИЛЬ КАРТОЧЕК (REYA BORDER) */
+    .reya-card {
+        background: #0D0D0E;
+        border: 1px solid #1A1A1B;
+        border-radius: 4px; /* Острые профессиональные углы */
+        padding: 24px;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reya-card:hover {
+        border-color: #4BFF99;
+        box-shadow: 0 0 30px rgba(75, 255, 153, 0.03);
+    }
+
+    /* ЗАГОЛОВКИ */
+    h1, h2, h3 {
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.03em !important;
+        margin-bottom: 1rem !important;
     }
     
-    /* Typography */
-    .label-text { color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-    .value-text { font-family: 'JetBrains Mono'; font-weight: 500; color: #FFF; font-size: 1.2rem; }
-    .highlight-green { color: #4BFF99; }
-    
-    /* Stats Bar */
-    .stats-bar {
-        display: flex; gap: 30px; padding: 10px 20px; background: #000; border-bottom: 1px solid #1C1C1E; margin-bottom: 20px;
+    .label {
+        font-family: 'Space Grotesk';
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #555557;
+        font-weight: 600;
+        margin-bottom: 8px;
     }
-    
-    /* Custom Sidebar */
-    [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1C1C1E !important; }
+
+    /* ЧИСЛА И ДАННЫЕ */
+    .mono-data {
+        font-family: 'JetBrains Mono', monospace;
+        color: #FFFFFF;
+        font-size: 1.4rem;
+        font-weight: 500;
+    }
+    .neon-text { color: #4BFF99 !important; }
+
+    /* КАСТОМНЫЕ КНОПКИ (NEON STROKE) */
+    .stButton > button {
+        background-color: transparent !important;
+        color: #4BFF99 !important;
+        border: 1px solid #4BFF99 !important;
+        padding: 10px 24px !important;
+        border-radius: 2px !important;
+        font-family: 'JetBrains Mono' !important;
+        font-size: 0.8rem !important;
+        text-transform: uppercase !important;
+        transition: 0.2s all !important;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #4BFF99 !important;
+        color: #000000 !important;
+        box-shadow: 0 0 20px rgba(75, 255, 153, 0.4) !important;
+    }
+
+    /* Ввод данных (Input Fields) */
+    .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #000000 !important;
+        border: 1px solid #1A1A1B !important;
+        color: white !important;
+        border-radius: 2px !important;
+    }
+
+    /* Кастомный Сайдбар */
+    [data-testid="stSidebar"] {
+        background-color: #080809 !important;
+        border-right: 1px solid #1A1A1B !important;
+        width: 300px !important;
+    }
+
+    /* Полоса прогресса */
+    .stProgress > div > div > div > div { background-color: #4BFF99 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. PRE-LOAD (SIMULATED LIVE DATA) ---
-l2_tps = 42.5
-gas_price = 0.0001
-block_height = 19450212
-
-# --- 3. HEADER: L2 NETWORK HEALTH ---
-st.markdown(f"""
-<div class="stats-bar">
-    <div><span class="label-text">Network:</span> <span class="highlight-green" style="font-size:0.8rem;">Reya L2 (Mainnet)</span></div>
-    <div><span class="label-text">TPS:</span> <span class="value-text" style="font-size:0.8rem;">{l2_tps}</span></div>
-    <div><span class="label-text">Gas:</span> <span class="value-text" style="font-size:0.8rem;">{gas_price} srUSD</span></div>
-    <div><span class="label-text">Block:</span> <span class="value-text" style="font-size:0.8rem;">{block_height}</span></div>
+# --- 3. HEADER & NAVIGATION ---
+# Создаем чистый Navbar в стиле Reya
+st.markdown("""
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0px 40px 0px; border-bottom: 1px solid #1A1A1B; margin-bottom: 40px;">
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <div style="width: 32px; height: 32px; background: #4BFF99; border-radius: 4px;"></div>
+        <div style="font-family: 'Space Grotesk'; font-weight: 600; font-size: 1.2rem; letter-spacing: -0.5px;">REYA <span style="color: #555;">ECOSYSTEM</span></div>
+    </div>
+    <div style="display: flex; gap: 30px; font-size: 0.8rem; font-family: 'JetBrains Mono'; color: #555;">
+        <div>NETWORK / <span style="color: #FFF;">MAINNET-L2</span></div>
+        <div>STATUS / <span style="color: #4BFF99;">STABLE</span></div>
+        <div>BLOCK / <span style="color: #FFF;">19,451,023</span></div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. SIDEBAR CONTEXT ---
+# --- 4. SIDEBAR ---
 with st.sidebar:
-    st.markdown("### 💠 Portfolio Manager")
-    st.markdown("""<div style="background:#111; padding:15px; border-radius:4px;">
-        <p class="label-text">Equity Value</p>
-        <p class="value-text">$42,105.50</p>
-        <p class="label-text" style="margin-top:10px;">Available Margin</p>
-        <p class="value-text" style="color:#4BFF99;">$38,400.12</p>
-    </div>""", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    mode = st.radio("Terminal Mode", ["Margin Analysis", "Vault Strategy", "XP Farming"])
+    st.markdown("<p class='label'>User Contribution</p>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background: #0D0D0E; padding: 20px; border: 1px solid #1A1A1B; border-radius: 4px;">
+        <p style="font-size: 0.7rem; color: #555; margin:0;">IMPACT POINTS</p>
+        <p class="mono-data neon-text" style="font-size: 1.8rem; margin:0;">1,420.50</p>
+        <p style="font-size: 0.6rem; color: #555; margin-top:10px;">GLOBAL RANK: <span style="color:#FFF;">#842</span></p>
+    </div>
+    """, unsafe_allow_html=True)
     st.divider()
-    st.caption("v2.4.1-Stable | Security: Audited by Halborn")
+    menu = st.radio("SELECT MODULE", ["Risk Analyzer", "Margin Efficiency", "Rewards Tracker"])
+    st.markdown("<p style='font-size: 0.6rem; color: #333; margin-top: 100px;'>v2.4.1 Build 829<br>Reya Labs (c) 2024</p>", unsafe_allow_html=True)
 
-# --- 5. MAIN INTERFACE GRID ---
-col_main, col_side = st.columns([2.5, 1])
+# --- 5. MAIN CONTENT ---
+col_left, col_right = st.columns([1.8, 1])
 
-with col_main:
-    st.markdown("<h2 style='margin-top:0;'>Advanced Margin Simulator</h2>", unsafe_allow_html=True)
+with col_left:
+    st.markdown("<h3>Protocol Analysis</h3>", unsafe_allow_html=True)
     
-    # Сетка параметров
-    with st.container():
-        st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            asset = st.selectbox("Market", ["BTC/srUSD", "ETH/srUSD", "SOL/srUSD"])
-            entry = st.number_input("Entry Price", value=65000)
-        with c2:
-            st.markdown('<p class="label-text" style="margin-bottom:23px;">Direction</p>', unsafe_allow_html=True)
-            direction = st.segmented_control("Dir", ["Long", "Short"], selection_mode="single", default="Long")
-        with c3:
-            leverage = st.slider("Leverage (x)", 1, 50, 10)
-        with c4:
-            collateral = st.number_input("Margin ($)", value=5000)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Визуализация: Liquidation Heatmap Concept
-    st.markdown("### Liquidation Risk Distribution")
+    # Сетка метрик в стиле Reya
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown('<div class="reya-card"><p class="label">Total TVL</p><p class="mono-data">$241.8M</p></div>', unsafe_allow_html=True)
+    with m2:
+        st.markdown('<div class="reya-card"><p class="label">Current APY</p><p class="mono-data neon-text">14.22%</p></div>', unsafe_allow_html=True)
+    with m3:
+        st.markdown('<div class="reya-card"><p class="label">Active Traders</p><p class="mono-data">12.1K</p></div>', unsafe_allow_html=True)
     
-    # Генерация данных графика
-    price_range = np.linspace(entry * 0.8, entry * 1.2, 50)
-    # Симуляция "кластеров" ликвидаций на рынке
-    liq_clusters = np.exp(-((price_range - (entry*0.9))**2) / (2 * (entry*0.02)**2)) * 100
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Визуализация данных (Стиль: Тонкие линии, темный фон)
+    st.markdown('<div class="reya-card">', unsafe_allow_html=True)
+    st.markdown("<p class="label">Liquidity Depth Simulator</p>", unsafe_allow_html=True)
+    
+    x = np.linspace(0, 10, 100)
+    y = np.sin(x) * 10 + 20
     
     fig = go.Figure()
-    # Добавляем тепловую карту (Area)
-    fig.add_trace(go.Scatter(x=price_range, y=liq_clusters, fill='tozeroy', 
-                             name="Liq Depth", line=dict(color='#FF3B69', width=0),
-                             fillcolor='rgba(255, 59, 105, 0.1)'))
-    
-    # Ваша цена ликвидации
-    my_liq = entry * (1 - 1/leverage + 0.05) if direction == "Long" else entry * (1 + 1/leverage - 0.05)
-    fig.add_vline(x=my_liq, line_dash="dash", line_color="#4BFF99", 
-                  annotation_text="YOUR LIQUIDATION", annotation_font_color="#4BFF99")
-    
+    fig.add_trace(go.Scatter(x=x, y=y, fill='tozeroy', line=dict(color='#4BFF99', width=2), fillcolor='rgba(75, 255, 153, 0.05)'))
     fig.update_layout(
         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        height=300, margin=dict(l=0, r=0, t=20, b=0),
-        xaxis=dict(showgrid=False, title="Asset Price"), yaxis=dict(showgrid=False, title="Liquidation Volume")
+        margin=dict(l=0, r=0, t=10, b=0), height=300,
+        xaxis=dict(showgrid=False, zeroline=False, tickfont=dict(family="JetBrains Mono", size=10, color="#444")),
+        yaxis=dict(showgrid=True, gridcolor="#1A1A1B", zeroline=False, tickfont=dict(family="JetBrains Mono", size=10, color="#444"))
     )
     st.plotly_chart(fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-with col_side:
-    st.markdown("### Execution Details")
+with col_right:
+    st.markdown("<h3>Margin Utility</h3>", unsafe_allow_html=True)
     
-    # Блок симуляции транзакции
-    st.markdown(f"""
-    <div class="pro-card">
-        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-            <span class="label-text">Est. Liq Price</span>
-            <span class="value-text" style="color:#FF3B69; font-size:1rem;">${my_liq:,.2f}</span>
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-            <span class="label-text">Margin Required</span>
-            <span class="value-text" style="font-size:1rem;">{collateral:,.2f} srUSD</span>
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-            <span class="label-text">Network Fee</span>
-            <span class="value-text" style="font-size:1rem;">$0.42</span>
-        </div>
-        <hr style="border-color:#1C1C1E">
-        <div style="display:flex; justify-content:space-between;">
-            <span class="label-text">Projected XP</span>
-            <span class="value-text highlight-green" style="font-size:1rem;">+14.2 / hr</span>
-        </div>
+    # Блок калькулятора (Professional Input Form)
+    st.markdown('<div class="reya-card">', unsafe_allow_html=True)
+    st.markdown("<p class='label'>Select Asset</p>", unsafe_allow_html=True)
+    st.selectbox("", ["BTC/srUSD", "ETH/srUSD", "SOL/srUSD"], label_visibility="collapsed")
+    
+    st.markdown("<p class='label' style='margin-top:20px;'>Position Leverage</p>", unsafe_allow_html=True)
+    lev = st.slider("", 1, 50, 10, label_visibility="collapsed")
+    
+    st.markdown("<p class='label' style='margin-top:20px;'>Margin Amount</p>", unsafe_allow_html=True)
+    st.number_input("", value=1000, label_visibility="collapsed")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("CALCULATE RISK PARAMS"):
+        with st.spinner("Processing on-chain logic..."):
+            import time; time.sleep(1)
+        st.markdown("<p style='color: #4BFF99; font-family: \"JetBrains Mono\"; font-size: 0.8rem;'>Analysis ready. Health Factor: 1.42 (Stable)</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Дополнительная информационная карточка
+    st.markdown("""
+    <div style="margin-top: 20px; border-left: 2px solid #4BFF99; padding-left: 20px;">
+        <p class="label">Protocol Insight</p>
+        <p style="font-size: 0.8rem; color: #888; line-height: 1.6;">Reya the first margin-optimized L2. By using this tool, you help the ecosystem visualize the capital efficiency of our cross-margin engine.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    if st.button("SIMULATE ON-CHAIN ACTION"):
-        with st.status("Simulating transaction on Reya L2..."):
-            st.write("Fetching Oracle prices (Pyth Network)...")
-            time.sleep(0.8)
-            st.write("Calculating Cross-Margin requirements...")
-            time.sleep(0.8)
-            st.write("Verifying solvency...")
-        st.success("Simulation passed. Ready for execution.")
-
-# --- 6. FOOTER: EXPORT & LOGS ---
-log_col, exp_col = st.columns([2, 1])
-with log_col:
-    st.markdown("""<p class="label-text">System Logs</p>
-    <div style="background:#000; padding:10px; border:1px solid #1C1C1E; height:80px; overflow-y:auto; font-family:'JetBrains Mono'; font-size:0.7rem; color:#4BFF99; opacity:0.6;">
-        [09:12:01] INFO: Connected to Reya Indexer (Mainnet)<br>
-        [09:12:05] WARN: High volatility detected in SOL markets<br>
-        [09:12:10] INFO: Account 0x71... verified for XP Multiplier 1.2x
-    </div>""", unsafe_allow_html=True)
-
-with exp_col:
-    st.markdown('<p class="label-text">Report Export</p>', unsafe_allow_html=True)
-    st.download_button("GENERATE PDF AUDIT", data="Risk Report Content", file_name="reya_risk_report.txt")
+# --- 6. FOOTER ---
+st.markdown("""
+<div style="margin-top: 100px; padding-top: 20px; border-top: 1px solid #1A1A1B; text-align: center;">
+    <p style="font-family: 'JetBrains Mono'; color: #333; font-size: 0.7rem;">BUILD_ID: CONTRIBUTOR_829_ALPHA // AUTHENTICATED ACCESS ONLY</p>
+</div>
+""", unsafe_allow_html=True)
