@@ -160,3 +160,10 @@ with col_b:
 
 st.divider()
 st.caption(f"Sync: {datetime.now().strftime('%H:%M:%S')} | Source: Reya Network Logs via Chainbase DataCloud")
+
+def get_crypto_price(symbol):
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT"
+        return float(requests.get(url).json()['price'])
+    except:
+        return 0
