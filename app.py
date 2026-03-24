@@ -186,4 +186,14 @@ with col_right:
     
     # Динамический цвет риска
     risk_color = "#00FFAA" if prob_down < 0.05 else "#FFAA00" if prob_down < 0.15 else "#FF0044"
-    st.markdown(f"<h1 style='color: {risk_color}; font-family: \"JetBrains Mono\", monospace; text-shadow: 0 0 20px {risk_color}40; font-size: 3rem;'>{prob_down*100:.2f}%</h1>", unsafe_allow_html=True
+    
+    # ИСПРАВЛЕННАЯ СТРОКА - используем одинарные кавычки внутри HTML
+    html_content = f"<h1 style='color: {risk_color}; font-family: JetBrains Mono, monospace; text-shadow: 0 0 20px {risk_color}40; font-size: 3rem;'>{prob_down*100:.2f}%</h1>"
+    st.markdown(html_content, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    st.markdown("<h3>💎 REYA MULTIPLIER</h3>", unsafe_allow_html=True)
+    efficiency = max(1.0, 1 + (vol_gap / 100))
+    st.code(f"EXECUTION EFFICIENCY: {efficiency:.2f}x\nSTATUS: OPTIMAL", language="bash")
+    st.caption("Algorithm calculates LP yield multipliers based on real-time IV vs RV spread.")
